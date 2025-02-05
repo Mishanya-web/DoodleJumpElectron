@@ -12,6 +12,10 @@ const gameHeight = BACKGROUND_HEIGHT * scaleRatio;
 
 const worldHeight = gameHeight * 2;
 
+//register scene here
+
+//end of register scene
+
 class StartScene extends Phaser.Scene {
     constructor() {
         super({ key: 'StartScene' });
@@ -22,6 +26,8 @@ class StartScene extends Phaser.Scene {
         this.load.image('playButton', 'assets/images/playButton.png');
         this.load.image('platform', 'assets/images/platform.png');
         this.load.image('player', 'assets/images/doodle.png');
+        this.load.image('scoreboardButton', 'assets/images/scoreboardButton.png');
+
 
         this.load.audio('jumpSound', 'assets/sounds/jump.wav');
     }
@@ -53,6 +59,14 @@ class StartScene extends Phaser.Scene {
 
         playButton.on('pointerdown', () => {
             this.scene.start('MainScene');
+        });
+
+        const leaderboardButton = this.add.image(gameWidth / 2 + 50, gameHeight / 2 + 300, 'scoreboardButton').setScale(scaleRatio);
+        leaderboardButton.setInteractive();
+        leaderboardButton.setScale(scaleRatio * 2);
+
+        leaderboardButton.on('pointerdown', () => {
+            this.scene.start('LeaderboardScene');
         });
     }
 }
@@ -218,7 +232,7 @@ class GameOverScene extends Phaser.Scene {
     }
 
     create(data) {
-        const finalScore = data.score;
+        const finalScore = Math.trunc(data.score);
 
         this.add.image(0, 0, 'background').setOrigin(0, 0).setScale(scaleRatio);
 
@@ -260,8 +274,134 @@ class GameOverScene extends Phaser.Scene {
         menuButton.on('pointerout', () => {
             menuButton.setScale(scaleRatio);
         });
+
+        const userId = localStorage.getItem('userId');
+        const token = localStorage.getItem('accessToken');
+
+        console.log('User ID:', userId);
+        console.log('Access Token:', token);
+
+        if (userId && token) {
+            console.log('Запрос на получение максимального счета...');
+            this.getMaxScore(userId, token, finalScore);
+        } else {
+            console.warn('Нет данных пользователя, запрос на сервер не отправляется.');
+        }
+    }
+
+    getMaxScore(userId, token, finalScore) {
+        fetch(`http://localhost:8000/api/score/`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Ответ от сервера:', data);
+
+                if (data && data.high_score !== undefined) {
+                    console.log('Текущий максимальный счет:', data.high_score);
+
+                    if (finalScore > data.high_score) {
+                        console.log(`Новый счет (${finalScore}) больше текущего (${data.high_score}). Обновляем...`);
+                        this.updateScore(userId, token, finalScore);
+                    } else {
+                        console.log('Счет не изменился, обновление не требуется.');
+                    }
+                } else {
+                    console.error('Ответ сервера не содержит high_score или формат данных неверный');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при получении счета:', error);
+            });
+    }
+
+    updateScore(userId, token, finalScore) {
+        fetch(`http://localhost:8000/api/score/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ score: finalScore })
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Счет успешно обновлен:', data);
+            })
+            .catch(error => {
+                console.error('Ошибка при обновлении счета:', error);
+            });
     }
 }
+
+class LeaderboardScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'LeaderboardScene' });
+    }
+
+    preload() {
+        this.load.image('background', 'assets/images/background.png');
+        this.load.image('menuButton', 'assets/images/menuButton.png');
+    }
+
+    create() {
+        this.add.image(0, 0, 'background').setOrigin(0, 0).setScale(scaleRatio);
+
+        this.add.text(gameWidth / 2, 100, 'LeaderBoard', {
+            fontSize: '48px',
+            fill: '#000',
+            fontFamily: 'DoodleJump',
+        }).setOrigin(0.5);
+
+        const menuButton = this.add.image(gameWidth / 2, gameHeight - 100, 'menuButton').setScale(scaleRatio).setInteractive();
+
+        menuButton.on('pointerdown', () => {
+            this.scene.start('StartScene');
+        });
+
+        this.loadLeaderboard();
+    }
+
+    loadLeaderboard() {
+        const token = localStorage.getItem('accessToken');
+
+        if (!token) {
+            console.warn('Нет токена, нельзя загрузить таблицу лидеров.');
+            return;
+        }
+
+        fetch('http://localhost:8000/api/leaderboard/', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => response.json())
+            .then(data => {
+                this.displayLeaderboard(data);
+            })
+            .catch(error => {
+                console.error('Ошибка при загрузке таблицы лидеров:', error);
+            });
+    }
+
+    displayLeaderboard(players) {
+        let startY = 180;
+        players.forEach((player, index) => {
+            this.add.text(gameWidth / 2 - 200, startY + index * 50, `${index + 1}. ${player.username}: ${player.high_score}`, {
+                fontSize: '32px',
+                fill: '#000',
+                fontFamily: 'DoodleJump',
+            });
+        });
+    }
+}
+
 
 const config = {
     type: Phaser.AUTO,
@@ -274,7 +414,7 @@ const config = {
             debug: false
         }
     },
-    scene: [StartScene, MainScene, GameOverScene],
+    scene: [StartScene, MainScene, GameOverScene, LeaderboardScene],
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH

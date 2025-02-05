@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DoodleJump</title>
+    <style>
+        @font-face {
+            font-family: "DoodleJump";
+            src: url("assets/fonts/DoodleJump.ttf") format("truetype");
+        }
+        body {
+            text-align: center;
+            font-family: "DoodleJump", Arial, sans-serif;
+            background: url('assets/images/background.png') no-repeat center center fixed;
+            background-size: cover;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .input-field {
+            display: block;
+            width: 250px;
+            height: 60px;
+            margin: 10px auto;
+            border: none;
+            background: url('assets/images/inputField.png') no-repeat center;
+            background-size: contain;
+            text-align: center;
+            font-size: 32px;
+            font-family: "DoodleJump", Arial, sans-serif;
+            font-weight: bold;
+            color: black;
+            outline: none;
+        }
+        .input-field::placeholder {
+            font-size: 32px;
+            color: #666;
+        }
+        .login-button {
+            display: block;
+            width: 250px;
+            height: 60px;
+            margin: 10px auto;
+            border: none;
+            background: url('assets/images/loginButton.png') no-repeat center;
+            background-size: contain;
+            cursor: pointer;
+        }
+        .login-button:hover {
+            opacity: 0.8;
+        }
+        .register-button {
+            display: block;
+            width: 250px;
+            height: 60px;
+            margin: 10px auto;
+            border: none;
+            background: url('assets/images/registerButton.png') no-repeat center;
+            background-size: contain;
+            cursor: pointer;
+        }
+        .register-button:hover {
+            opacity: 0.8;
+        }
+        .switch-button {
+            display: block;
+            width: 187px;
+            height: 45px;
+            margin: 10px auto;
+            border: none;
+            background: url('assets/images/emptyButton.png') no-repeat center;
+            background-size: contain;
+            cursor: pointer;
+            text-align: center;
+            font-family: "DoodleJump", Arial, sans-serif;
+            font-size: 24px;
+            font-weight: bold;
+            color: black;
+        }
+        .switch-button:hover {
+            opacity: 0.8;
+        }
+        #error-message, #register-error {
+            font-size: 18px;
+            color: red;
+        }
+        #game-container {
+            visibility: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .form-container {
+            display: none;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .form-container.active {
+            display: block;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div id="login-form" class="form-container active">
+    <input type="text" id="username" class="input-field" placeholder="username">
+    <input type="password" id="password" class="input-field" placeholder="password">
+    <button class="login-button" onclick="login()"></button>
+    <p id="error-message"></p>
+    <button class="switch-button" onclick="switchForm('register-form')">register</button>
+</div>
+
+<div id="register-form" class="form-container">
+    <input type="text" id="new-username" class="input-field" placeholder="username">
+    <input type="password" id="new-password" class="input-field" placeholder="password">
+    <input type="password" id="confirm-password" class="input-field" placeholder="confirm password">
+    <button class="register-button" onclick="register()"></button>
+    <p id="register-error"></p>
+    <button class="switch-button" onclick="switchForm('login-form')">login</button>
+</div>
+
+<div id="game-container"></div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000/api/";
+
+    function switchForm(formId) {
+        document.querySelectorAll('.form-container').forEach(form => form.classList.remove('active'));
+        document.getElementById(formId).classList.add('active');
+    }
+
+    function login() {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+
+        fetch(`${API_URL}token/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.access) {
+                    localStorage.setItem("accessToken", data.access);
+                    console.log("Access token сохранен:", data.access);
+
+                    fetch(`${API_URL}user/`, {
+                        method: "GET",
+                        headers: {
+                            "Authorization": `Bearer ${data.access}`,
+                            "Content-Type": "application/json"
+                        }
+                    })
+                        .then(response => response.json())
+                        .then(userData => {
+                            localStorage.setItem("userId", userData.id);
+                            console.log("User ID сохранен:", userData.id);
+                            startGame();
+                        })
+                        .catch(error => {
+                            console.error("Ошибка при получении ID пользователя:", error);
+                            document.getElementById("error-message").textContent = "Ошибка при получении данных пользователя!";
+                        });
+                } else {
+                    document.getElementById("error-message").textContent = "Неверные данные!";
+                }
+            })
+            .catch(error => {
+                console.error("Ошибка при входе:", error);
+                document.getElementById("error-message").textContent = "Ошибка при входе!";
+            });
+    }
+
+    function register() {
+        const username = document.getElementById("new-username").value;
+        const password = document.getElementById("new-password").value;
+        const confirmPassword = document.getElementById("confirm-password").value;
+
+        if (password !== confirmPassword) {
+            document.getElementById("register-error").textContent = "Пароли не совпадают!";
+            return;
+        }
+
+        fetch(`${API_URL}register/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    loginAfterRegistration(username, password);
+                } else {
+                    document.getElementById("register-error").textContent = "Ошибка регистрации!";
+                }
+            })
+            .catch(error => console.error("Ошибка при регистрации:", error));
+    }
+
+    function loginAfterRegistration(username, password) {
+        fetch(`${API_URL}token/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.access) {
+                    localStorage.setItem("accessToken", data.access);
+                    console.log("Access token сохранен:", data.access);
+
+                    fetch(`${API_URL}user/`, {
+                        method: "GET",
+                        headers: {
+                            "Authorization": `Bearer ${data.access}`,
+                            "Content-Type": "application/json"
+                        }
+                    })
+                        .then(response => response.json())
+                        .then(userData => {
+                            localStorage.setItem("userId", userData.id);
+                            console.log("User ID сохранен:", userData.id);
+                            startGame();
+                        })
+                        .catch(error => {
+                            console.error("Ошибка при получении ID пользователя:", error);
+                            document.getElementById("error-message").textContent = "Ошибка при получении данных пользователя!";
+                        });
+                } else {
+                    document.getElementById("error-message").textContent = "Ошибка при получении токена!";
+                }
+            })
+            .catch(error => {
+                console.error("Ошибка при входе:", error);
+                document.getElementById("error-message").textContent = "Ошибка при входе!";
+            });
+    }
+
+    function startGame() {
+        document.getElementById("login-form").style.display = "none";
+        document.getElementById("register-form").style.display = "none";
+        document.getElementById("game-container").style.visibility = "visible";
+
+        const script = document.createElement("script");
+        script.src = "game.js";
+        document.body.appendChild(script);
+    }
+</script>
+
+
+</body>
+</html>
